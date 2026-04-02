@@ -1,57 +1,32 @@
 # 舆情罗盘（Sentiment Compass）
 
-基于 OpenClaw 的 AI 舆情叙事分析系统，从“发生了什么”进一步追问“媒体和平台为什么这样讲述”。
+> 一个面向 OpenClaw 的舆情叙事分析 Skill。  
+> 用来自动采集多平台热点、聚合重复事件、补充搜索上下文，并生成可直接阅读或归档的舆情分析日报。
 
-## 项目亮点
+## 项目简介
 
-- 多平台采集：百度热搜、微博热搜、知乎热榜、头条热榜
-- 三层去重：单平台聚类、跨平台合并、多次采集间追加去重
-- 入池有上限：每轮只把 RRF 排序后的 TOP5 事件写入当天事件池，避免把低热度长尾全部塞入库中
-- 全量分析：分析和日报都覆盖当天累计事件池里的全部事件，而不是只看某一轮的 TOP5
-- 叙事分析：五类媒体框架、八类归因主体、冲突度评估、态势研判
-- 自动运行：10:00 与 18:00 采集，23:00 先采集再分析再生成日报
+`Sentiment Compass`（舆情罗盘）是一个为 OpenClaw 设计的中文舆情分析 Skill。
 
-## 架构示意
+它不只回答“今天发生了什么”，还进一步关注：
 
-```text
-用户 / Cron 定时任务
-    ↓ 自然语言指令
-OpenClaw Agent → 触发 sentiment-compass Skill
-    ↓
-Phase 1: 多源采集 + 三层去重 + RRF TOP5 入池
-    ↓
-cleaned/{date}_events.json  当天累计事件池（只增不减）
-    ↓
-Phase 2: web_search 多源摘要 + LLM 叙事框架分析
-    ↓
-analyzed/{date}_analysis.json  当天覆盖更新
-    ↓
-Phase 3: 日报生成
-    ↓
-reports/{date}_daily_report.md  当天覆盖更新
-```
+- 不同平台在如何讲述同一件事
+- 责任被归因给了谁
+- 舆论冲突和风险可能如何演化
 
-## 工作原理
+项目适合用于品牌公关、内容研究、热点观察、信息整理、日报生成等场景，也适合把 OpenClaw 部署为一名可持续工作的 AI 舆情分析助手。
 
-本项目把“一天的舆情”视为逐步积累的过程，而不是单次快照。
+## 它可以做什么
 
-示例：
+| 能力 | 说明 |
+| --- | --- |
+| 多平台热点采集 | 自动抓取百度热搜、微博热搜、知乎热榜、头条热榜 |
+| 热点聚合去重 | 合并同一事件在不同平台或不同表述下的重复条目 |
+| 叙事框架识别 | 识别事件在搜索结果与报道摘要中的主要叙事方式 |
+| 归因与态势分析 | 判断责任指向、冲突强度、风险等级与趋势走向 |
+| 日报自动生成 | 输出结构化分析结果，并生成 Markdown 舆情日报 |
+| 定时运行 | 可结合 OpenClaw Cron 按固定时间自动采集与生成报告 |
 
-```text
-10:00 采集 → 本轮 TOP5：A B C D E → 事件池：A B C D E
-18:00 采集 → 本轮 TOP5：A B D F G → 事件池：A B C D E F G
-23:00 采集 → 本轮 TOP5：A F G H I → 事件池：A B C D E F G H I
-```
-
-其中：
-
-- 每轮先从四个平台各抓取 15 条热榜标题
-- 先做单平台聚类，再做跨平台合并
-- 用 `score = Σ(1/(10 + rank_i))` 计算 RRF，取本轮前 5 个事件入池
-- 入池时与当天已有事件做语义合并：重复则更新，不重复则追加，旧事件不删除
-- 分析与日报始终面向当天事件池中的全部事件
-
-## 目录结构
+## 仓库结构
 
 ```text
 sentiment-compass/
@@ -72,65 +47,76 @@ sentiment-compass/
 
 ## 环境要求
 
-- 阿里云轻量应用服务器或无影云电脑
-- Linux 环境，已安装 OpenClaw 最新版
-- Python 3，仅依赖标准库
-- 已启用 Tools：`read`、`write`、`exec`、`web_search`、`web_fetch`
-- 已配置可用的 `web_search` 提供商
-- 推荐模型：通义千问 `qwen-plus` 或 DeepSeek 系列
+部署本项目前，请先确保运行环境具备以下条件：
 
-## 快速开始
+- 已安装并可正常使用 `OpenClaw`
+- 具备 `bash` 运行环境
+- 已安装 `Python 3`
+- 运行环境可以访问互联网
+- OpenClaw 已启用 `read`、`write`、`exec`、`web_search`、`web_fetch`
+- OpenClaw 已配置可用的大模型与 `web_search` 提供能力
+
+如果你希望自动定时运行，还需要 OpenClaw 的 `cron` 能力可用。
+
+## 安装部署
 
 ```bash
-git clone <your-repo>
+git clone https://github.com/shihongx/Sentiment-Compass.git sentiment-compass
 cd sentiment-compass
 bash setup.sh
-bash cron-setup.sh
 ```
 
-## Skill 触发示例
+`setup.sh` 会完成以下工作：
+
+- 将 Skill 部署到 `~/.openclaw/workspace/skills/`
+- 初始化数据目录
+- 检查 `openclaw` 与 `python3`
+- 测试热榜采集脚本是否可运行
+
+## 快速使用
+
+在 OpenClaw 中安装完成后，可以直接使用自然语言触发 Skill，例如：
 
 - `采集今日舆情`
 - `看看今天有什么热点`
 - `分析今日舆情`
-- `做一份叙事分析`
+- `做一份舆情叙事分析`
 - `生成今日舆情日报`
 
-## 执行逻辑
+## 定时任务
 
-- 采集任务：仅执行 Phase 1，展示本轮采集 TOP5 和本次新增事件
-- 分析任务：始终先执行 Phase 1，再对当天累计全部事件执行 Phase 2
-- 日报任务：始终先执行 Phase 1，再执行 Phase 2，最后生成 Phase 3 日报
+如果你希望让它自动运行，可以执行：
 
-分析文件与日报文件都是“同日单文件覆盖更新”，不会因为文件已存在就跳过重新生成。
+```bash
+bash cron-setup.sh
+```
 
-## 数据文件说明
+默认会创建 3 个定时任务：
 
-- `raw/{date}/hotlists_HHMM.json`
-  原始热榜抓取结果，每轮一份
-- `cleaned/{date}_events.json`
-  当天累计事件池，追加合并去重
-- `analyzed/{date}_analysis.json`
-  当天分析结果，覆盖更新
-- `reports/{date}_daily_report.md`
-  当天日报，覆盖更新
+| 时间 | 任务 |
+| --- | --- |
+| `10:00` | 上午采集 |
+| `18:00` | 傍晚采集 |
+| `23:00` | 采集 + 分析 + 生成日报 |
 
-## 设计取舍
+常用管理命令：
 
-- 为什么不把一轮采集的全部事件都入池：
-  因为比赛场景更关注“当轮跨平台共同凸显的热点”，所以先用 RRF 聚合，再只保留本轮 TOP5 入池，减少长尾噪声。
-- 为什么分析和日报要全量：
-  因为一天不同时间段的热点可能完全不同，既然事件池采用追加机制，就应让分析和日报覆盖全部累计事件，避免遗漏。
-- 为什么分析和日报每次都先采集：
-  因为上一次采集之后，热搜可能已经变化。先采一轮，才能把最新热点补进当天事件池。
+```bash
+openclaw cron list
+openclaw cron run <job-id>
+openclaw cron runs --id <job-id>
+openclaw cron edit <job-id> --enabled false
+openclaw cron remove <job-id>
+```
 
-## Token 粗估
+## 输出文件
 
-- Phase 1：约 2,500 tokens
-- Phase 2：按 8 个事件估算约 8,000 tokens
-- Phase 3：约 4,000 tokens
-- 每日总量：约 25,000 tokens
+运行过程中会在 OpenClaw 工作目录下生成数据文件：
 
-## License
-
-MIT
+| 路径 | 说明 |
+| --- | --- |
+| `~/.openclaw/workspace/data/raw/{date}/hotlists_HHMM.json` | 原始热榜抓取结果 |
+| `~/.openclaw/workspace/data/cleaned/{date}_events.json` | 当日聚合后的事件池 |
+| `~/.openclaw/workspace/data/analyzed/{date}_analysis.json` | 当日事件分析结果 |
+| `~/.openclaw/workspace/data/reports/{date}_daily_report.md` | 当日 Markdown 舆情日报 |
+```
